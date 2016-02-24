@@ -19,23 +19,22 @@ spa.shell = (function () {
       anchor_schema_map : {
         chat  : { opened : true, closed : true }
       },
+      resize_interval : 200,
       main_html : String()
         + '<div class="spa-shell-head">'
-          + '<div class="spa-shell-head-logo"></div>'
-          +'<h1>SPA</h1>'
-          +'<p>javascript end to end</p>'
+          + '<div class="spa-shell-head-logo">'
+            + '<h1>SPA</h1>'
+            + '<p>javascript end to end</p>'
+          + '</div>'
           + '<div class="spa-shell-head-acct"></div>'
-          + '<div class="spa-shell-head-search"></div>'
         + '</div>'
         + '<div class="spa-shell-main">'
           + '<div class="spa-shell-main-nav"></div>'
           + '<div class="spa-shell-main-content"></div>'
         + '</div>'
         + '<div class="spa-shell-foot"></div>'
-        + '<div class="spa-shell-modal"></div>',
-      resize_interval: 200
+        + '<div class="spa-shell-modal"></div>'
     },
-
     stateMap = {
       $container  : undefined,
       anchor_map  : {},
@@ -43,24 +42,12 @@ spa.shell = (function () {
     },
     jqueryMap = {},
 
-    copyAnchorMap,    setJqueryMap,
-    changeAnchorPart, onHashchange, onResize,
-    onTapAcct, onLogin, onLogout,
+    copyAnchorMap,    setJqueryMap,   changeAnchorPart,
+    onResize,         onHashchange,
+    onTapAcct,        onLogin,        onLogout,
     setChatAnchor,    initModule;
   //----------------- END MODULE SCOPE VARIABLES ---------------
 
-  onResize = function () {
-    if (stateMap.resize_idto) {
-      return true;
-    }
-    spa.chat.handleResize();
-    stateMap.resize_idto = setTimeout(
-      function() {
-        stateMap.resize_idto = undefined;
-      }, configMap.resize_interval
-    );
-    return true;
-  };
   //------------------- BEGIN UTILITY METHODS ------------------
   // Returns copy of stored anchor map; minimizes overhead
   copyAnchorMap = function () {
@@ -72,10 +59,11 @@ spa.shell = (function () {
   // Begin DOM method /setJqueryMap/
   setJqueryMap = function () {
     var $container = stateMap.$container;
+
     jqueryMap = {
-      $container: $container,
-      $acct: $container.find('.spa-shell-head-acct'),
-      $nav: $container.find('.spa-shell-main-nav')
+      $container : $container,
+      $acct      : $container.find('.spa-shell-head-acct'),
+      $nav       : $container.find('.spa-shell-main-nav')
     };
   };
   // End DOM method /setJqueryMap/
@@ -198,8 +186,8 @@ spa.shell = (function () {
     // End adjust chat component if changed
 
     // Begin revert anchor if slider change denied
-    if ( ! is_ok ){
-      if ( anchor_map_previous ){
+    if ( ! is_ok ) {
+      if ( anchor_map_previous ) {
         $.uriAnchor.setAnchor( anchor_map_previous, null, true );
         stateMap.anchor_map = anchor_map_previous;
       }
@@ -213,6 +201,41 @@ spa.shell = (function () {
     return false;
   };
   // End Event handler /onHashchange/
+
+  // Begin Event handler /onResize/
+  onResize = function () {
+    if ( stateMap.resize_idto ) { return true; }
+
+    spa.chat.handleResize();
+    stateMap.resize_idto = setTimeout(
+      function () { stateMap.resize_idto = undefined; },
+      configMap.resize_interval
+    );
+
+    return true;
+  };
+  // End Event handler /onResize/
+
+  onTapAcct = function ( event ) {
+    var acct_text, user_name, user = spa.model.people.get_user();
+    if ( user.get_is_anon() ) {
+      user_name = prompt( 'Please sign-in' );
+      spa.model.people.login( user_name );
+      jqueryMap.$acct.text( '... processing ...' );
+    }
+    else {
+     spa.model.people.logout();
+    }
+    return false;
+  };
+
+  onLogin = function ( event, login_user ) {
+    jqueryMap.$acct.text( login_user.name );
+  };
+
+  onLogout = function ( event, logout_user ) {
+    jqueryMap.$acct.text( 'Please sign-in' );
+  };
   //-------------------- END EVENT HANDLERS --------------------
 
   //---------------------- BEGIN CALLBACKS ---------------------
@@ -229,48 +252,27 @@ spa.shell = (function () {
   //   * false - requested anchor part was not updated
   // Throws   : none
   //
-  setChatAnchor = function ( position_type ){
+  setChatAnchor = function ( position_type ) {
     return changeAnchorPart({ chat : position_type });
   };
-
-  onTapAcct = function(event) {
-    var acct_text, user_name, user = spa.model.people.get_user();
-    if(user.get_is_anon()) {
-      user_name = prompt('Please sign-in');
-      spa.model.people.login(user_name);
-      jqueryMap.$acct.text('... processing ...');
-    }
-    else {
-      spa.model.people.logout();
-    }
-    return false;
-  };
-
-  onLogin = function(event, login_user) {
-    jqueryMap.$acct.text(login_user.name);
-  };
-
-  onLogout = function(event, logout_user) {
-    jqueryMap.$acct.text('Please sign-in');
-  }
   // End callback method /setChatAnchor/
   //----------------------- END CALLBACKS ----------------------
 
   //------------------- BEGIN PUBLIC METHODS -------------------
   // Begin Public method /initModule/
-  // Example  : spa.shell.initModule( $('#app_div_id') );
-  // Purpose  :
+  // Example   : spa.shell.initModule( $('#app_div_id') );
+  // Purpose   :
   //   Directs the Shell to offer its capability to the user
   // Arguments :
   //   * $container (example: $('#app_div_id')).
-  //     A jQuery collection that should represent
+  //     A jQuery collection that should represent 
   //     a single DOM container
   // Action    :
   //   Populates $container with the shell of the UI
   //   and then configures and initializes feature modules.
   //   The Shell is also responsible for browser-wide issues
-  //   such as URI anchor and cookie management.
-  // Returns   : none
+  //   such as URI anchor and cookie management
+  // Returns   : none 
   // Throws    : none
   //
   initModule = function ( $container ) {
@@ -292,6 +294,12 @@ spa.shell = (function () {
     });
     spa.chat.initModule( jqueryMap.$container );
 
+    spa.avtr.configModule({
+      chat_model   : spa.model.chat,
+      people_model : spa.model.people
+    });
+    spa.avtr.initModule( jqueryMap.$nav );
+
     // Handle URI anchor change events.
     // This is done /after/ all feature modules are configured
     // and initialized, otherwise they will not be ready to handle
@@ -299,12 +307,16 @@ spa.shell = (function () {
     // is considered on-load
     //
     $(window)
+      .bind( 'resize',     onResize )
       .bind( 'hashchange', onHashchange )
-      .bind('resize', onResize)
       .trigger( 'hashchange' );
-    $.gevent.subscribe($container, 'spa-login', onLogin);
-    $.gevent.subscribe($container, 'spa-logout', onLogout);
-    jqueryMap.$acct.text('Please sign-in').bind('utap', onTapAcct);
+
+    $.gevent.subscribe( $container, 'spa-login',  onLogin  );
+    $.gevent.subscribe( $container, 'spa-logout', onLogout );
+
+    jqueryMap.$acct
+      .text( 'Please sign-in')
+      .bind( 'utap', onTapAcct );
   };
   // End PUBLIC method /initModule/
 

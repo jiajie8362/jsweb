@@ -1,5 +1,5 @@
 /*
- * jQuery plugin for unified mouse and touch events
+ * Jquery plugin for unified mouse and touch events
  *
  * Copyright (c) 2013 Michael S. Mikowski
  * (mike[dot]mikowski[at]gmail[dotcom])
@@ -8,31 +8,21 @@
  * http://jquery.org/license
  *
  * Versions
- *  0.3.0   - Initial jQuery plugin site release
- *          - Replaced scrollwheel zoom with drag motion.
- *            This resolved a conflict with scrollable areas.
- *  0.3.1   - Change for jQuery plugins site
- *  0.3.2   - Updated to jQuery 1.9.1.
- *            Confirmed 1.7.0-1.9.1 compatibility.
- *  0.4.2   - Updated documentation
- *  0.4.3   - Removed fatal execption possibility if originalEvent
- *            is not defined on event object
- *  0.5.0   - Updated docs, removed cruft, updated for jslint,
- *            updated test page (zoom)
- *  0.6.0   - Added px_tdelta_x and px_tdelta_y for deltas from start
- *          - Fixed onheld and drag conflicts
- *  0.6.1   - Default px_radius now 10 pixels
- *  1.1.0-5 - No code changes. Updated npm keywords. Fixed typos.
- *            Bumped version to represent maturity and stability.
+ *  0.3.0 - Initial jQuery plugin site release
+ *        - Replaced scrollwheel zoom with drag motion.
+ *          This resolved a conflict with scrollable areas.
+ *  0.3.1 - Change for jQuery plugins site
+ *  0.3.2 - Updated to jQuery 1.9.1.
+ *          Confirmed 1.7.0-1.9.1 compatibility.
  *
 */
 
 /*jslint           browser : true,   continue : true,
   devel  : true,    indent : 2,       maxerr  : 50,
   newcap : true,  plusplus : true,    regexp  : true,
-  sloppy : true,      vars : false,     white  : true
+  sloppy : true,      vars : true,     white  : true
 */
-/*global jQuery */
+/*global jQuery, sl */
 
 (function ( $ ) {
   //---------------- BEGIN MODULE SCOPE VARIABLES --------------
@@ -46,7 +36,7 @@
     defaultOptMap   = {           // Default option hash
       bound_ns_map  : {},         // namspace hash e.g. bound_ns_map.utap.fred
       wheel_ratio   : 15,         // multiplier for mousewheel delta
-      px_radius     : 10,         // 'distance' dragged before dragstart
+      px_radius     : 3,          // 'distance' dragged before dragstart
       ignore_class  : ':input',   // 'not' suppress matching elements
       tap_time      : 200,        // millisecond max time to consider tap
       held_tap_time : 300         // millisecond min time to consider taphold
@@ -61,7 +51,8 @@
 
     checkMatchVal, removeListVal,  pushUniqVal,   makeListPlus,
     fnHeld,        fnMotionStart,  fnMotionMove,
-    fnMotionEnd,   onMouse,        onTouch
+    fnMotionEnd,   onMouse,        onTouch,
+    onMousewheel
     ;
   //----------------- END MODULE SCOPE VARIABLES ---------------
 
@@ -125,16 +116,13 @@
 
   // Begin define special event handlers
   Ue = {
-    setup : function( data, name_list, bind_fn ) {
+    setup : function( data, a_names, fn_bind ) {
       var
-        this_el     = this,
-        $to_bind    = $(this_el),
+        elem_this = this,
+        $to_bind  = $(elem_this),
         seen_map    = {},
         option_map, idx, namespace_key, ue_namespace_code, namespace_list
         ;
-
-      // jslint hack to allow unused arguments
-      if ( data && bind_fn ) { console.log( 'unused arguments' ); }
 
       // if previous related event bound do not rebind, but do add to
       // type of event bound to this element, if not already noted
@@ -142,10 +130,10 @@
 
       option_map = {};
       $.extend( true, option_map, defaultOptMap );
-      $.data( this_el, optionKey, option_map );
+      $.data( elem_this, optionKey, option_map );
 
-      namespace_list = makeListPlus(name_list.slice(0));
-      if ( ! namespace_list.length
+      namespace_list = makeListPlus(a_names.slice(0));
+      if ( ! namespace_list.length 
         || namespace_list[0] === ""
       ) { namespace_list = ["000"]; }
 
@@ -162,17 +150,17 @@
 
         $to_bind.bind( 'mousedown'  + ue_namespace_code, onMouse  );
         $to_bind.bind( 'touchstart' + ue_namespace_code, onTouch );
+        $to_bind.bind( 'mousewheel' + ue_namespace_code, onMousewheel );
       }
 
-      boundList.push_uniq( this_el ); // record as bound element
+      boundList.push_uniq( elem_this ); // record as bound element
 
       if ( ! isMoveBound ) {
         // console.log('first element bound - adding global binds');
-        $(document).bind( 'mousemove.__ue',   onMouse );
-        $(document).bind( 'touchmove.__ue',   onTouch );
-        $(document).bind( 'mouseup.__ue'  ,   onMouse );
-        $(document).bind( 'touchend.__ue' ,   onTouch );
-        $(document).bind( 'touchcancel.__ue', onTouch );
+        $(document).bind( 'mousemove.__ue', onMouse  );
+        $(document).bind( 'touchmove.__ue', onTouch  );
+        $(document).bind( 'mouseup.__ue'  , onMouse  );
+        $(document).bind( 'touchend.__ue' , onTouch  );
         isMoveBound = true;
       }
     },
@@ -192,8 +180,8 @@
     // this always executes immediate after setup (if first binding)
     add : function ( arg_map ) {
       var
-        this_el         = this,
-        option_map      = $.data( this_el, optionKey ),
+        elem_this       = this,
+        option_map      = $.data( elem_this, optionKey ),
         namespace_str   = arg_map.namespace,
         event_type      = arg_map.type,
         bound_ns_map, namespace_list, idx, namespace_key
@@ -211,7 +199,7 @@
 
       namespace_list = namespace_str.split('.');
 
-      for ( idx = 0; idx < namespace_list.length; idx += 1 ) {
+      for ( idx = 0; idx < namespace_list.length; idx++ ) {
         namespace_key = namespace_list[idx];
         bound_ns_map[event_type][namespace_key] = true;
       }
@@ -242,7 +230,7 @@
       // complete record.
       namespace_list = namespace_str.split('.');
 
-      for ( idx = 0; idx < namespace_list.length; idx += 1 ) {
+      for ( idx = 0; idx < namespace_list.length; idx++ ) {
         namespace_key = namespace_list[idx];
         if (bound_ns_map[event_type][namespace_key]) {
           delete bound_ns_map[event_type][namespace_key];
@@ -254,7 +242,7 @@
       }
     },
 
-    teardown : function( name_list ) {
+    teardown : function( a_names ) {
       var
         elem_bound   = this,
         $bound       = $(elem_bound),
@@ -266,7 +254,7 @@
       // do not tear down if related handlers are still bound
       if ( ! $.isEmptyObject( bound_ns_map ) ) { return; }
 
-      namespace_list = makeListPlus(name_list);
+      namespace_list = makeListPlus(a_names);
       namespace_list.push_uniq('000');
 
       NSPACE_01:
@@ -291,7 +279,6 @@
         $(document).unbind( 'touchmove.__ue');
         $(document).unbind( 'mouseup.__ue');
         $(document).unbind( 'touchend.__ue');
-        $(document).unbind( 'touchcancel.__ue');
         isMoveBound = false;
       }
     }
@@ -303,16 +290,16 @@
   // Begin motion control /fnHeld/
   fnHeld = function ( arg_map ) {
     var
-      timestamp    = +new Date(),
+      timestamp         = +new Date(),
       motion_id    = arg_map.motion_id,
       motion_map   = arg_map.motion_map,
       bound_ns_map = arg_map.bound_ns_map,
       event_ue
       ;
 
-    delete motion_map.tapheld_toid;
+    delete motion_map.idto_tapheld;
 
-    if ( ! motion_map.do_allow_held ) { return; }
+    if ( ! motion_map.do_allow_tap ) { return; }
 
     motion_map.px_end_x     = motion_map.px_start_x;
     motion_map.px_end_y     = motion_map.px_start_y;
@@ -320,7 +307,7 @@
     motion_map.ms_elapsed   = timestamp - motion_map.ms_timestart;
 
     if ( bound_ns_map.uheld ) {
-      event_ue = $.Event('uheld');
+      event_ue     = $.Event('uheld');
       $.extend( event_ue, motion_map );
       $(motion_map.elem_bound).trigger(event_ue);
     }
@@ -350,7 +337,7 @@
       bound_ns_map   = option_map.bound_ns_map,
       $target        = $(event_src.target ),
       do_zoomstart   = false,
-      motion_map, cb_map, event_ue
+      motion_map, cb_map, do_allow_tap, event_ue
       ;
 
     // this should never happen, but it does
@@ -360,6 +347,10 @@
 
     // :input selector includes text areas
     if ( $target.is( option_map.ignore_class ) ) { return; }
+
+    do_allow_tap = bound_ns_map.utap
+      || bound_ns_map.uheld || bound_ns_map.uheldstart
+      ? true : false;
 
     cb_map = callbackList.pop();
 
@@ -380,23 +371,21 @@
     }
 
     motion_map = {
-      do_allow_tap  : bound_ns_map.utap ? true : false,
-      do_allow_held : ( bound_ns_map.uheld || bound_ns_map.uheldstart )
-        ? true : false,
-      elem_bound    : arg_map.elem,
-      elem_target   : event_src.target,
-      ms_elapsed    : 0,
-      ms_timestart  : event_src.timeStamp,
-      ms_timestop   : undefined,
-      option_map    : option_map,
-      orig_target   : event_src.target,
-      px_current_x  : event_src.clientX,
-      px_current_y  : event_src.clientY,
-      px_end_x      : undefined,
-      px_end_y      : undefined,
-      px_start_x    : event_src.clientX,
-      px_start_y    : event_src.clientY,
-      timeStamp     : event_src.timeStamp
+      do_allow_tap : do_allow_tap,
+      elem_bound   : arg_map.elem,
+      elem_target  : event_src.target,
+      ms_elapsed   : 0,
+      ms_timestart : event_src.timeStamp,
+      ms_timestop  : undefined,
+      option_map   : option_map,
+      orig_target  : event_src.target,
+      px_current_x : event_src.clientX,
+      px_current_y : event_src.clientY,
+      px_end_x     : undefined,
+      px_end_y     : undefined,
+      px_start_x   : event_src.clientX,
+      px_start_y   : event_src.clientY,
+      timeStamp    : event_src.timeStamp
     };
 
     motionMapMap[ motion_id ] = motion_map;
@@ -424,10 +413,10 @@
     }
 
     if ( bound_ns_map.uheld || bound_ns_map.uheldstart ) {
-      motion_map.tapheld_toid = setTimeout(
+      motion_map.idto_tapheld = setTimeout(
         function() {
           fnHeld({
-            motion_id    : motion_id,
+            motion_id  : motion_id,
             motion_map   : motion_map,
             bound_ns_map : bound_ns_map
           });
@@ -444,13 +433,12 @@
       motion_id   = arg_map.motion_id,
       event_src   = arg_map.event_src,
       do_zoommove = false,
-
-      motion_map,    option_map,  bound_ns_map,
-      is_over_rad,   event_ue,    px_pinch_zoom,
-      px_delta_zoom, mzoom1_map,  mzoom2_map
+      motion_map, option_map, bound_ns_map,
+      event_ue, px_pinch_zoom, px_delta_zoom,
+      mzoom1_map, mzoom2_map
       ;
 
-    if ( ! motionMapMap[ motion_id ] ) { return; }
+    if ( ! motionMapMap[motion_id] ) { return; }
 
     motion_map   = motionMapMap[motion_id];
     option_map   = motion_map.option_map;
@@ -466,25 +454,16 @@
     motion_map.px_current_x = event_src.clientX;
     motion_map.px_current_y = event_src.clientY;
 
-    motion_map.px_tdelta_x  = motion_map.px_start_x - event_src.clientX;
-    motion_map.px_tdelta_y  = motion_map.px_start_y - event_src.clientY;
-
-    is_over_rad = (
-      Math.abs( motion_map.px_tdelta_x ) > option_map.px_radius
-      || Math.abs( motion_map.px_tdelta_y ) > option_map.px_radius
-    );
     // native event object override
     motion_map.timeStamp    = event_src.timeStamp;
 
-    // disallow held or tap if outside of zone
-    if ( is_over_rad ) {
-      motion_map.do_allow_tap  = false;
-      motion_map.do_allow_held = false;
-    }
-
-    // disallow tap if time has elapsed 
-    if ( motion_map.ms_elapsed > option_map.tap_time) {
-      motion_map.do_allow_tap = false;
+    // disallow tap if outside of zone or time elapsed
+    // we use this for other events, so we do it every time
+    if ( motion_map.do_allow_tap ) {
+      if ( Math.abs(motion_map.px_delta_x) > option_map.px_radius
+        || Math.abs(motion_map.pd_delta_y) > option_map.px_radius
+        || motion_map.ms_elapsed           > option_map.tap_time
+      ) { motion_map.do_allow_tap = false; }
     }
 
     if ( motion1ZoomId && motion2ZoomId
@@ -530,31 +509,28 @@
         $.extend( event_ue, motion_map );
         $(motion_map.elem_bound).trigger(event_ue);
       }
-      return;
     }
-
-    if ( motionDragId === motion_id ) {
+    else if ( motionDragId === motion_id ) {
       if ( bound_ns_map.udragmove ) {
         event_ue = $.Event('udragmove');
         $.extend( event_ue, motion_map );
         $(motion_map.elem_bound).trigger(event_ue);
       }
-      return;
     }
 
-    if ( bound_ns_map.udragstart
-      && motion_map.do_allow_tap  === false
-      && motion_map.do_allow_held === false
-      && !( motionDragId && motionHeldId )
+    if ( ! motionDragId
+      && ! motionHeldId
+      && bound_ns_map.udragstart
+      && motion_map.do_allow_tap === false
     ) {
       motionDragId = motion_id;
       event_ue = $.Event('udragstart');
       $.extend( event_ue, motion_map );
       $(motion_map.elem_bound).trigger(event_ue);
 
-      if ( motion_map.tapheld_toid ) {
-        clearTimeout(motion_map.tapheld_toid);
-        delete motion_map.tapheld_toid;
+      if ( motion_map.idto_tapheld ) {
+        clearTimeout(motion_map.idto_tapheld);
+        delete motion_map.idto_tapheld;
       }
     }
   };
@@ -592,22 +568,19 @@
     motion_map.px_end_x     = event_src.clientX;
     motion_map.px_end_y     = event_src.clientY;
 
-    motion_map.px_tdelta_x  = motion_map.px_start_x - motion_map.px_end_x;
-    motion_map.px_tdelta_y  = motion_map.px_start_y - motion_map.px_end_y;
-
     // native event object override
     motion_map.timeStamp    = event_src.timeStamp
     ;
 
     // clear-out any long-hold tap timer
-    if ( motion_map.tapheld_toid ) {
-      clearTimeout(motion_map.tapheld_toid);
-      delete motion_map.tapheld_toid;
+    if ( motion_map.idto_tapheld ) {
+      clearTimeout(motion_map.idto_tapheld);
+      delete motion_map.idto_tapheld;
     }
 
     // trigger utap
     if ( bound_ns_map.utap
-      && motion_map.ms_elapsed <= option_map.tap_time
+      && motion_map.ms_elapsed   <= option_map.tap_time
       && motion_map.do_allow_tap
     ) {
       event_ue = $.Event('utap');
@@ -674,12 +647,12 @@
   // We use the 'type' attribute to dispatch to motion control
   onTouch = function ( event ) {
     var
-      this_el     = this,
+      elem_this   = this,
       timestamp   = +new Date(),
       o_event     = event.originalEvent,
-      touch_list  = o_event ? o_event.changedTouches || [] : [],
-      touch_count = touch_list.length,
-      idx, touch_event, motion_id, handler_fn
+      a_touches   = o_event.changedTouches || [],
+      idx, touch_event, motion_id,
+      handler_fn
       ;
 
     doDisableMouse = true;
@@ -687,30 +660,26 @@
     event.timeStamp = timestamp;
 
     switch ( event.type ) {
-      case 'touchstart' :
-        handler_fn = fnMotionStart;
-        event.preventDefault();
-      break;
+      case 'touchstart' : handler_fn = fnMotionStart; break;
       case 'touchmove'  :
         handler_fn = fnMotionMove;
         event.preventDefault();
       break;
-      case 'touchend'    :
-      case 'touchcancel' : handler_fn = fnMotionEnd;   break;
+      case 'touchend'   : handler_fn = fnMotionEnd;   break;
       default : handler_fn = null;
     }
 
     if ( ! handler_fn ) { return; }
 
-    for ( idx = 0; idx < touch_count; idx++ ) {
-      touch_event  = touch_list[idx];
+    for ( idx = 0; idx < a_touches.length; idx++ ) {
+      touch_event  = a_touches[idx];
 
       motion_id = 'touch' + String(touch_event.identifier);
 
       event.clientX   = touch_event.clientX;
       event.clientY   = touch_event.clientY;
       handler_fn({
-        elem      : this_el,
+        elem      : elem_this,
         motion_id : motion_id,
         event_src : event
       });
@@ -723,7 +692,7 @@
   // We use the 'type' attribute to dispatch to motion control
   onMouse = function ( event ) {
     var
-      this_el       = this,
+      elem_this     = this,
       motion_id     = 'mouse' + String(event.button),
       request_dzoom = false,
       handler_fn
@@ -754,7 +723,7 @@
     if ( ! handler_fn ) { return; }
 
     handler_fn({
-      elem          : this_el,
+      elem          : elem_this,
       event_src     : event,
       request_dzoom : request_dzoom,
       motion_id     : motion_id
@@ -762,6 +731,7 @@
   };
   // End event handler /onMouse/
   //-------------------- END EVENT HANDLERS --------------------
+
 
   // Export special events through jQuery API
   $Special.ue
@@ -778,4 +748,6 @@
       callback_nomatch : callback_nomatch || null
     });
   };
+
 }(jQuery));
+
